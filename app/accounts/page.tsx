@@ -47,16 +47,20 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { toast } from "@/hooks/use-toast"
 import {
   Upload,
   Filter,
   ChevronLeft,
   ChevronRight,
   MoreHorizontal,
-  Download,
   Edit,
   Trash,
   FolderIcon as FolderMove,
+  FileText,
+  X,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react"
 
 // Generate a larger sample dataset
@@ -103,16 +107,19 @@ const categoriesWithoutAll = categories.filter((cat) => cat !== "All")
 // Available page size options
 const pageSizeOptions = [10, 25, 50, 100, 500]
 
-// CSV template content
-const csvTemplateContent = `username,proxy
-Pimboto,192.168.1.1:8080:user:pass
-TechUser,10.0.0.1:3128:admin:secure`
+// Map file extensions to categories
+const extensionToCategory = {
+  lolanna: "Personal",
+  lolaaa: "Business",
+  lol: "Marketing",
+  // Add more mappings as needed
+  default: "Imported", // Default category for unknown extensions
+}
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState(initialAccounts)
   const [currentPage, setCurrentPage] = useState(1)
   const [selectedCategory, setSelectedCategory] = useState("All")
-  const [csvContent, setCsvContent] = useState("")
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
@@ -121,6 +128,13 @@ export default function AccountsPage() {
   const [editFormData, setEditFormData] = useState({ username: "", proxy: "" })
   const [newCategory, setNewCategory] = useState("")
   const [itemsPerPage, setItemsPerPage] = useState(10)
+  const [loading, setLoading] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [previewAccounts, setPreviewAccounts] = useState<any[]>([])
+  const [isPreviewDialogOpen, setIsPreviewDialogOpen] = useState(false)
+  const [importErrors, setImportErrors] = useState<string[]>([])
+  const [csvContent, setCsvContent] = useState("")
+  const csvTemplateContent = "username,proxy\n"
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -139,6 +153,119 @@ export default function AccountsPage() {
     setItemsPerPage(size)
     // Reset to first page when changing page size to avoid empty pages
     setCurrentPage(1)
+  }
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return
+
+    const filesArray = Array.from(e.target.files)
+    setSelectedFiles(filesArray)
+
+    // Process files for preview
+    processFilesForPreview(filesArray)
+  }
+
+  // Process files for preview
+  const processFilesForPreview = async (files: File[]) => {
+    setLoading(true)
+    const errors: string[] = []
+    const accounts: any[] = []
+
+    for (const file of files) {
+      try {
+        // Extract username and extension from filename
+        const filename = file.name
+        const lastDotIndex = filename.lastIndexOf(".")
+
+        if (lastDotIndex === -1) {
+          errors.push(`File "${filename}" has no extension`)
+          continue
+        }
+
+        const username = filename.substring(0, lastDotIndex)
+        const extension = filename.substring(lastDotIndex + 1)
+
+        // Determine category based on extension
+        const category = extensionToCategory[extension] || extensionToCategory.default
+
+        // Generate a random proxy for demonstration
+        const proxy = `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}:${8000 + Math.floor(Math.random() * 2000)}:user:pass`
+
+        accounts.push({
+          username,
+          extension,
+          category,
+          proxy,
+          status: "logged-out",
+        })
+      } catch (error) {
+        errors.push(`Error processing file "${file.name}": ${error.message}`)
+      }
+    }
+
+    setPreviewAccounts(accounts)
+    setImportErrors(errors)
+    setLoading(false)
+
+    if (accounts.length > 0) {
+      setIsPreviewDialogOpen(true)
+    }
+  }
+
+  // Remove a file from the selected files
+  const removeFile = (index: number) => {
+    const newFiles = [...selectedFiles]
+    newFiles.splice(index, 1)
+    setSelectedFiles(newFiles)
+
+    // Update preview if files are removed
+    if (newFiles.length > 0) {
+      processFilesForPreview(newFiles)
+    } else {
+      setPreviewAccounts([])
+      setImportErrors([])
+    }
+  }
+
+  // Clear all selected files
+  const clearFiles = () => {
+    setSelectedFiles([])
+    setPreviewAccounts([])
+    setImportErrors([])
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  // Import accounts from files
+  const handleImportAccounts = () => {
+    if (previewAccounts.length === 0) {
+      toast({
+        title: "Error",
+        description: "No valid accounts to import",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const newAccounts = previewAccounts.map((account, index) => ({
+      id: accounts.length + index + 1,
+      username: account.username,
+      proxy: account.proxy,
+      status: account.status,
+      category: account.category,
+    }))
+
+    setAccounts([...accounts, ...newAccounts])
+    clearFiles()
+    setIsPreviewDialogOpen(false)
+    setIsImportDialogOpen(false)
+
+    toast({
+      title: "Accounts imported",
+      description: `${newAccounts.length} accounts have been imported successfully`,
+    })
   }
 
   // Handle CSV import from text
@@ -344,54 +471,107 @@ export default function AccountsPage() {
                     Import Accounts
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-md">
                   <DialogHeader>
                     <DialogTitle>Import Accounts</DialogTitle>
                     <DialogDescription>
-                      Upload a CSV file with account information. Format: username, proxy (e.g., "Pimboto,
-                      ip:host:port:pass")
+                      Upload account files to import them. Each file will be imported as a separate account.
                     </DialogDescription>
                   </DialogHeader>
 
                   <div className="grid gap-4 py-4">
-                    <div className="flex justify-between items-center">
-                      <Button size="sm" variant="outline" onClick={handleDownloadTemplate}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download Template
-                      </Button>
-
-                      <div>
-                        <input
-                          type="file"
-                          accept=".csv"
-                          ref={fileInputRef}
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                        <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                          <Upload className="mr-2 h-4 w-4" />
-                          Upload CSV
-                        </Button>
+                    <div className="rounded-md border-2 border-dashed p-6 text-center">
+                      <input
+                        type="file"
+                        multiple
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        accept="*"
+                      />
+                      <div className="flex flex-col items-center gap-2">
+                        <Upload className="h-8 w-8 text-muted-foreground" />
+                        <div className="flex flex-col items-center gap-1">
+                          <Button variant="ghost" onClick={() => fileInputRef.current?.click()} className="h-auto p-1">
+                            <span className="text-primary font-medium">Click to upload</span>
+                          </Button>
+                          <span className="text-xs text-muted-foreground">or drag and drop files here</span>
+                        </div>
                       </div>
                     </div>
 
-                    <Label htmlFor="csv-content">CSV Content</Label>
-                    <textarea
-                      id="csv-content"
-                      className="min-h-[200px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      placeholder="username, proxy
-Pimboto, 192.168.1.1:8080:user:pass"
-                      value={csvContent}
-                      onChange={(e) => setCsvContent(e.target.value)}
-                    />
+                    {selectedFiles.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <Label>Selected Files ({selectedFiles.length})</Label>
+                          <Button variant="ghost" size="sm" onClick={clearFiles} className="h-6 px-2 text-xs">
+                            Clear All
+                          </Button>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto space-y-1 rounded-md border p-2">
+                          {selectedFiles.map((file, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between text-sm p-1 rounded hover:bg-muted"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                <span className="truncate">{file.name}</span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeFile(index)}
+                                className="h-6 w-6 p-0"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="rounded-md border p-3 bg-muted/30">
+                      <div className="flex items-center gap-2 mb-1">
+                        <FileText className="h-4 w-4" />
+                        <h3 className="text-sm font-medium">File Format</h3>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Each file should be named with the format: <span className="font-mono">username.extension</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">The extension will determine the category:</p>
+                      <ul className="text-xs text-muted-foreground mt-1 space-y-0.5 list-disc pl-5">
+                        <li>
+                          <span className="font-mono">.lolanna</span> - Personal
+                        </li>
+                        <li>
+                          <span className="font-mono">.lolaaa</span> - Business
+                        </li>
+                        <li>
+                          <span className="font-mono">.lol</span> - Marketing
+                        </li>
+                      </ul>
+                    </div>
                   </div>
 
                   <DialogFooter>
                     <Button size="sm" variant="outline" onClick={() => setIsImportDialogOpen(false)}>
                       Cancel
                     </Button>
-                    <Button size="sm" onClick={handleImport}>
-                      Import
+                    <Button
+                      size="sm"
+                      onClick={() => processFilesForPreview(selectedFiles)}
+                      disabled={selectedFiles.length === 0 || loading}
+                    >
+                      {loading ? (
+                        <>
+                          <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                          Processing...
+                        </>
+                      ) : (
+                        "Preview Accounts"
+                      )}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -640,6 +820,81 @@ Pimboto, 192.168.1.1:8080:user:pass"
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Preview Accounts Dialog */}
+      <Dialog open={isPreviewDialogOpen} onOpenChange={setIsPreviewDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Preview Accounts</DialogTitle>
+            <DialogDescription>Review the accounts that will be imported from your files.</DialogDescription>
+          </DialogHeader>
+
+          {importErrors.length > 0 && (
+            <div className="mb-4 p-3 border border-destructive/50 rounded-md bg-destructive/10">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertCircle className="h-4 w-4 text-destructive" />
+                <h3 className="text-sm font-medium text-destructive">Errors Found</h3>
+              </div>
+              <ul className="text-xs text-destructive space-y-1 ml-6 list-disc">
+                {importErrors.map((error, index) => (
+                  <li key={index}>{error}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {previewAccounts.length > 0 ? (
+            <div className="space-y-4">
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Extension</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Proxy</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {previewAccounts.map((account, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium">{account.username}</TableCell>
+                        <TableCell>{account.extension}</TableCell>
+                        <TableCell>{account.category}</TableCell>
+                        <TableCell className="font-mono text-xs">{account.proxy}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/30">
+                <CheckCircle2 className="h-4 w-4 text-primary" />
+                <p className="text-sm">
+                  {previewAccounts.length} account{previewAccounts.length !== 1 ? "s" : ""} ready to be imported
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              {importErrors.length > 0 ? (
+                <p>Please fix the errors in your files and try again.</p>
+              ) : (
+                <p>No valid accounts found in the selected files.</p>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button size="sm" variant="outline" onClick={() => setIsPreviewDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleImportAccounts} disabled={previewAccounts.length === 0}>
+              Import {previewAccounts.length} Account{previewAccounts.length !== 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </SidebarProvider>
   )
 }
