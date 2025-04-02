@@ -1,3 +1,4 @@
+//app\dashboard\page.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -16,28 +17,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Users, Calendar, ArrowUpRight, Clock, CheckCircle2 } from "lucide-react"
 import { motion } from "framer-motion"
+import { toast } from "@/hooks/use-toast"
 
-// Sample data (in a real app, this would come from your API or state management)
-const accountsData = {
-  total: 12,
-  active: 7,
-  categories: {
-    Personal: 2,
-    Business: 2,
-    Marketing: 3,
-    Research: 2,
-    Development: 1,
-    Testing: 1,
-    Admin: 1,
-  },
-}
-
-const postsData = {
-  total: 5,
-  pending: 3,
-  completed: 2,
-  nextScheduled: new Date(Date.now() + 3600000), // 1 hour from now
-}
+// Import services
+import { accountsService, Account, Category } from "@/lib/services/accounts-service"
 
 // Animation variants
 const containerVariants = {
@@ -78,11 +61,58 @@ const countVariants = {
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  // This ensures animations only run after component is mounted
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  // Fetch accounts and categories data
+  const fetchDashboardData = async () => {
+    try {
+      setIsLoading(true)
+      const fetchedAccounts = await accountsService.getAccounts()
+      const fetchedCategories = await accountsService.getCategories()
+      
+      setAccounts(fetchedAccounts)
+      setCategories(fetchedCategories)
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load dashboard data",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Compute dashboard statistics
+  const computeDashboardStats = () => {
+    // Total accounts
+    const totalAccounts = accounts.length
+    const activeAccounts = accounts.filter(acc => acc.status === 'Active').length
+
+    // Category distribution
+    const categoryDistribution = accounts.reduce((acc, account) => {
+      const category = account.category || 'Uncategorized'
+      acc[category] = (acc[category] || 0) + 1
+      return acc
+    }, {} as Record<string, number>)
+
+    return {
+      total: totalAccounts,
+      active: activeAccounts,
+      categories: categoryDistribution
+    }
+  }
+
+  // Hardcoded posts data (as requested)
+  const postsData = {
+    total: 5,
+    pending: 3,
+    completed: 2,
+    nextScheduled: new Date(Date.now() + 3600000), // 1 hour from now
+  }
 
   // Format the next scheduled post time
   const formatNextScheduled = () => {
@@ -105,6 +135,15 @@ export default function DashboardPage() {
     const days = Math.floor(diff / 86400000)
     return `in ${days} day${days !== 1 ? "s" : ""}`
   }
+
+  // Fetch data on mount
+  useEffect(() => {
+    setMounted(true)
+    fetchDashboardData()
+  }, [])
+
+  // Compute stats whenever accounts change
+  const accountsData = mounted ? computeDashboardStats() : { total: 0, active: 0, categories: {} }
 
   if (!mounted) return null
 
@@ -131,7 +170,9 @@ export default function DashboardPage() {
         <div className="flex flex-1 flex-col gap-6 p-6">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <Button size="sm">Refresh</Button>
+            <Button size="sm" onClick={fetchDashboardData} disabled={isLoading}>
+              {isLoading ? "Refreshing..." : "Refresh"}
+            </Button>
           </div>
 
           <motion.div
@@ -164,7 +205,7 @@ export default function DashboardPage() {
               </Card>
             </motion.div>
 
-            {/* Scheduled Posts Card */}
+            {/* Scheduled Posts Card (unchanged) */}
             <motion.div variants={itemVariants}>
               <Card className="overflow-hidden">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -190,7 +231,7 @@ export default function DashboardPage() {
               </Card>
             </motion.div>
 
-            {/* Activity Timeline */}
+            {/* Activity Timeline (unchanged) */}
             <motion.div variants={itemVariants} className="md:col-span-2">
               <Card>
                 <CardHeader>
@@ -296,4 +337,3 @@ export default function DashboardPage() {
     </SidebarProvider>
   )
 }
-

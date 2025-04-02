@@ -22,7 +22,7 @@ export function VersionSwitcher({
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <SidebarMenuButton size="lg" className="pointer-events-none">
+        <SidebarMenuButton size="lg" className="" onClick={() => (window.location.href = "/")}>
           <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
             <ThreadsIcon />
           </div>

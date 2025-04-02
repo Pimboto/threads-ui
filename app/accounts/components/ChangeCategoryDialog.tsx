@@ -13,7 +13,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Account, Category } from "@/lib/services/accounts-service"
+import { Account, Category, accountsService } from "@/lib/services/accounts-service"
+import { toast } from "@/hooks/use-toast"
 
 interface Props {
   open: boolean
@@ -34,36 +35,76 @@ export function ChangeCategoryDialog({
   categories,
 }: Props) {
   const [newCategory, setNewCategory] = useState("")
+  const [isChanging, setIsChanging] = useState(false)
 
+  // Reset new category when account changes
   useEffect(() => {
     if (currentAccount) {
-      setNewCategory(currentAccount.category ?? "")
+      setNewCategory(currentAccount.category || "")
     }
   }, [currentAccount])
 
-  function handleChangeCategory() {
-    if (!currentAccount) return
+  async function handleChangeCategory() {
+    if (!currentAccount || !newCategory) return
 
-    // Actualizar en local
-    const updatedAccounts = accounts.map((acc) =>
-      acc.id === currentAccount.id
-        ? { ...acc, category: newCategory }
-        : acc
-    )
-    setAccounts(updatedAccounts)
+    try {
+      setIsChanging(true)
 
-    onOpenChange(false)
+      // Find the selected category
+      const selectedCategory = categories.find(cat => cat.name === newCategory)
+      
+      if (!selectedCategory) {
+        throw new Error("Selected category not found")
+      }
+
+      // Call the service method to add account to category
+      await accountsService.addAccountsToCategory(
+        selectedCategory.id!, 
+        [currentAccount.username]
+      )
+
+      // Update local state
+      const updatedAccounts = accounts.map((acc) =>
+        acc.username === currentAccount.username
+          ? { ...acc, category: newCategory }
+          : acc
+      )
+      setAccounts(updatedAccounts)
+
+      // Close dialog
+      onOpenChange(false)
+
+      // Show success toast
+      toast({
+        title: "Category Updated",
+        description: `Account "${currentAccount.username}" moved to "${newCategory}" category.`,
+      })
+    } catch (error) {
+      console.error('Failed to change category:', error)
+      
+      toast({
+        title: "Error",
+        description: "Failed to change account category. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsChanging(false)
+    }
   }
 
-  // Quitamos "All" porque es algo virtual
-  const categoryNames = categories.map((c) => c.name).filter(Boolean)
+  // Get category names, excluding the current category
+  const categoryNames = categories
+    .map(c => c.name)
+    .filter(name => name !== currentAccount?.category)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Change Category</DialogTitle>
-          <DialogDescription>Move this account to a different category.</DialogDescription>
+          <DialogDescription>
+            Move the account "{currentAccount?.username}" to a different category.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
@@ -71,7 +112,10 @@ export function ChangeCategoryDialog({
             <Label htmlFor="category" className="text-right">
               Category
             </Label>
-            <Select value={newCategory} onValueChange={setNewCategory}>
+            <Select 
+              value={newCategory} 
+              onValueChange={setNewCategory}
+            >
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
@@ -87,11 +131,20 @@ export function ChangeCategoryDialog({
         </div>
 
         <DialogFooter>
-          <Button size="sm" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => onOpenChange(false)}
+            disabled={isChanging}
+          >
             Cancel
           </Button>
-          <Button size="sm" onClick={handleChangeCategory}>
-            Save Changes
+          <Button 
+            size="sm" 
+            onClick={handleChangeCategory}
+            disabled={!newCategory || isChanging}
+          >
+            {isChanging ? "Changing..." : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>

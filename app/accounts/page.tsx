@@ -26,6 +26,8 @@ import { AccountsTable } from "./components/AccountsTable"
 import { ImportAccountsDialog } from "./components/ImportAccountsDialog"
 import { CategoryEditorDialog } from "./components/CategoryEditorDialog"
 import { DeleteCategoryAlert } from "./components/DeleteCategoryAlert"
+import { DeleteAccountAlert } from "./components/DeleteAccountAlert"
+
 
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([])
